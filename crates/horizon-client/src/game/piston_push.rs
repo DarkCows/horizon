@@ -1520,6 +1520,44 @@ mod h255_mob_piston_ground_tests {
     }
     #[test]
     #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
+    fn displaced_pig_stays_linked_to_a_lazy_minecart() {
+        with_game(|game| {
+            game.player = None;
+            game.load_ticking_neighbourhood(1, 0);
+            game.update_chunk_tickets();
+            assert!(game.entity_ticking_area()(15, 4));
+            assert!(!game.entity_ticking_area()(16, 4));
+            assert!(game.tickets.levels().block_ticking(1, 0));
+
+            assert!(game.run_command(
+                r#"summon minecart 16.5 200 4.5 {Passengers:[{id:"minecraft:pig",UUID:[I;255,1,0,3],NoAI:1b}]}"#
+            ));
+            let pig = mob_index(game, 3);
+            let cart = game.carts[0].id;
+            assert_eq!(game.mobs[pig].extra.mount, Some(cart));
+
+            // The pig has just been pushed across the boundary by a piston.
+            let displaced = Vec3::new(15.5, 200.1875, 4.5);
+            let velocity = Vec3::new(-1.0, 0.0, 0.0);
+            game.mobs[pig].position = displaced;
+            game.mobs[pig].velocity = velocity;
+            game.sync_riders();
+            assert_eq!(game.mobs[pig].position, displaced);
+            assert_eq!(game.mobs[pig].velocity, velocity);
+            assert_eq!(game.mobs[pig].extra.mount, Some(cart));
+
+            assert!(game.run_command("forceload add 16 0"));
+            game.update_chunk_tickets();
+            assert!(game.entity_ticking_area()(16, 4));
+            game.sync_riders();
+            assert_eq!(game.mobs[pig].position.x, 16.5);
+            assert_eq!(game.mobs[pig].velocity, Vec3::ZERO);
+            assert_eq!(game.mobs[pig].extra.mount, Some(cart));
+        });
+    }
+
+    #[test]
+    #[ignore = "needs prepared resources in HORIZON_TEST_RESOURCES"]
     fn h255_real_honey_piston_lifecycle_clears_mob_ground_before_second_drag() {
         with_game(|game| {
             game.world.game_time = 0;

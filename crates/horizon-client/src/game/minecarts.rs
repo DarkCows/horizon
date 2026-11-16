@@ -1871,18 +1871,29 @@ impl Game<'_> {
             }
         }
     }
-    /// `positionRider` for the mobs in minecarts: each sits on the cart's
-    /// passenger attachment, less its own vehicle attachment.
+    /// `ServerLevel.tickPassenger` only runs for a ticking cart and passenger.
+    /// A piston can move a passenger away from a lazy cart without dismounting it.
+    /// Remote clients still position the riders of carts they are tracking.
     pub(super) fn seat_cart_mobs(&mut self, riding: &super::passengers::Riders) {
+        let ticking = self.remote.is_none().then(|| self.entity_ticking_area());
+        let can_seat = |p: Vec3| {
+            ticking
+                .as_ref()
+                .is_none_or(|test| test(p.x.floor() as i32, p.z.floor() as i32))
+        };
         for i in 0..self.carts.len() {
             let id = self.carts[i].id;
             let Some(js) = riding.get(&id) else {
                 continue;
             };
             let (pos, prev) = (self.carts[i].position, self.carts[i].previous);
+            if !can_seat(pos) {
+                continue;
+            }
             let cart_box = self.carts[i].bounds();
             let seats: Vec<(usize, f64, f64)> = js
                 .iter()
+                .filter(|&&j| can_seat(self.mobs[j].position))
                 .map(|&j| {
                     let m = &self.mobs[j];
                     // Minecart's box is 0.98 wide.
