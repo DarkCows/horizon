@@ -1553,6 +1553,20 @@ mod h255_mob_piston_ground_tests {
             assert_eq!(game.mobs[pig].position.x, 16.5);
             assert_eq!(game.mobs[pig].velocity, Vec3::ZERO);
             assert_eq!(game.mobs[pig].extra.mount, Some(cart));
+
+            // A cart moving under its own tick can seat its rider on the
+            // lazy side on the way out, before both stop ticking.
+            assert!(game.run_command("forceload remove 16 0"));
+            game.update_chunk_tickets();
+            game.carts[0].position = Vec3::new(15.9, 200.0, 4.5);
+            game.carts[0].velocity = Vec3::new(0.4, 0.0, 0.0);
+            game.mobs[pig].position = displaced;
+            game.tick_carts();
+            let crossed = game.carts[0].position;
+            assert!(crossed.x >= 16.0, "{crossed:?}");
+            game.sync_riders();
+            assert_eq!(game.mobs[pig].position.x, crossed.x);
+            assert_eq!(game.mobs[pig].extra.mount, Some(cart));
         });
     }
 

@@ -174,6 +174,8 @@ pub(super) struct Minecart {
     /// `Entity.tickCount`, which `MinecartCommandBlock.activateMinecart`
     /// measures its `ACTIVATION_DELAY` against.
     pub tick_count: i32,
+    /// Server tick in which the cart last moved under its own tick.
+    last_tick: Option<u64>,
     /// `MinecartCommandBlock.lastActivated`.
     pub last_activated: i32,
     /// An activator rail asked for the command during this tick; it runs once
@@ -390,6 +392,7 @@ impl Minecart {
             in_water: false,
             command: horizon_client::command_block::CommandBlock::default(),
             tick_count: 0,
+            last_tick: None,
             last_activated: 0,
             command_due: false,
             // A fresh `BaseSpawner`, as `MinecartSpawner`'s constructor makes.
@@ -1370,6 +1373,7 @@ impl Game<'_> {
         index: &mut CartIndex,
     ) -> bool {
         c.tick_count += 1;
+        c.last_tick = Some(self.ticks);
         c.previous = c.position;
         c.previous_yaw = c.yaw;
         c.previous_pitch = c.pitch;
@@ -1886,11 +1890,14 @@ impl Game<'_> {
             let Some(js) = riding.get(&id) else {
                 continue;
             };
-            let (pos, prev) = (self.carts[i].position, self.carts[i].previous);
-            if !can_seat(pos) {
+            let cart = &self.carts[i];
+            let (pos, prev) = (cart.position, cart.previous);
+            // A cart that crossed out of range during its own tick still
+            // finishes that tick by seating riders on the far side.
+            if cart.last_tick != Some(self.ticks) && !can_seat(pos) {
                 continue;
             }
-            let cart_box = self.carts[i].bounds();
+            let cart_box = cart.bounds();
             let seats: Vec<(usize, f64, f64)> = js
                 .iter()
                 .filter(|&&j| can_seat(self.mobs[j].position))
