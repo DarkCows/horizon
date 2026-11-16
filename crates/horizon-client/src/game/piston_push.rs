@@ -1541,7 +1541,9 @@ mod h255_mob_piston_ground_tests {
             let velocity = Vec3::new(-1.0, 0.0, 0.0);
             game.mobs[pig].position = displaced;
             game.mobs[pig].velocity = velocity;
-            game.sync_riders();
+            let age = game.mobs[pig].age;
+            game.tick_creature_entities().unwrap();
+            assert_eq!(game.mobs[pig].age, age);
             assert_eq!(game.mobs[pig].position, displaced);
             assert_eq!(game.mobs[pig].velocity, velocity);
             assert_eq!(game.mobs[pig].extra.mount, Some(cart));

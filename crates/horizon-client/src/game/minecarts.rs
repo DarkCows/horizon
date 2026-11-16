@@ -321,6 +321,16 @@ pub(super) struct Rail {
     powered: bool,
 }
 impl Minecart {
+    /// A lazy cart does not tick its riders. A cart that just crossed out
+    /// of range still finishes its tick and seats its riders on the far side.
+    pub(super) fn ticks_passengers(&self, tick: u64, ticking: &impl Fn(i32, i32) -> bool) -> bool {
+        self.last_tick == Some(tick)
+            || ticking(
+                self.position.x.floor() as i32,
+                self.position.z.floor() as i32,
+            )
+    }
+
     /// `Minecart.tick`: stationary rotation does not turn the passenger.
     pub(super) fn accumulate_rotation(&mut self) {
         self.passenger_yaw_delta = 0.0;
@@ -1892,9 +1902,10 @@ impl Game<'_> {
             };
             let cart = &self.carts[i];
             let (pos, prev) = (cart.position, cart.previous);
-            // A cart that crossed out of range during its own tick still
-            // finishes that tick by seating riders on the far side.
-            if cart.last_tick != Some(self.ticks) && !can_seat(pos) {
+            if ticking
+                .as_ref()
+                .is_some_and(|test| !cart.ticks_passengers(self.ticks, test))
+            {
                 continue;
             }
             let cart_box = cart.bounds();

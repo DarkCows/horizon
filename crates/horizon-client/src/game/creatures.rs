@@ -1151,14 +1151,32 @@ impl Game<'_> {
         self.combat.charged_exploders.clear();
         self.combat.exploded.clear();
         self.combat.exploded_kinds.clear();
+        // `ServerLevel.tickNonPassenger` reaches a mounted mob through the
+        // vehicle's tick. A piston can take a cart's rider into a ticking
+        // chunk, where other entities can affect it while the cart stays lazy.
+        let ticking = self.entity_ticking_area();
+        let lazy_carts: horizon_client::fast_hash::FxHashSet<u32> = self
+            .carts
+            .iter()
+            .filter(|cart| !cart.ticks_passengers(self.ticks, &ticking))
+            .map(|cart| cart.id)
+            .collect();
+        let waiting_riders: horizon_client::fast_hash::FxHashSet<u32> = if lazy_carts.is_empty() {
+            Default::default()
+        } else {
+            self.mobs
+                .iter()
+                .filter(|m| m.extra.mount.is_some_and(|id| lazy_carts.contains(&id)))
+                .map(|m| m.id)
+                .collect()
+        };
         // EntityTickEvent.Pre for the mobs about to tick, before the loop holds them.
         let mut round = self.native_tick_round();
         if round.listening() {
-            let ticking = self.entity_ticking_area();
             let mut i = 0;
             while let Some(m) = self.mobs.get(i) {
                 let (x, z) = (m.position.x.floor() as i32, m.position.z.floor() as i32);
-                if self.world.loaded(x, z) && ticking(x, z) {
+                if self.world.loaded(x, z) && ticking(x, z) && !waiting_riders.contains(&m.id) {
                     let (id, kind) = (m.id, super::native_ticks::TickKind::Mob(m.kind.clone()));
                     self.native_tick_pre_batch(&mut round, id, kind);
                 }
@@ -1244,7 +1262,7 @@ impl Game<'_> {
                 ticking: &ticking,
                 nearest: &nearest,
                 single_player,
-                canceled: &|id| round.canceled(id),
+                canceled: &|id| waiting_riders.contains(&id) || round.canceled(id),
                 difficulty: &difficulty,
                 cached_difficulty: None,
             };
