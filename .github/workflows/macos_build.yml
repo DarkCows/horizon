@@ -1,0 +1,54 @@
+name: macOS ARM64 build
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up stable Rust on Apple Silicon
+        run: |
+          test "$(uname -m)" = arm64
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Build the game and command-line tools
+        run: |
+          cargo build --locked --profile fast \
+            -p horizon-official --bin horizon-official \
+            -p horizon-client-lib --bin horizon-ctl \
+            -p horizon-prepare --bin horizon-prepare \
+            -p horizon-server --bin horizon-server
+      - name: Package and check the native binaries
+        run: |
+          out=dist/horizon-macos-arm64
+          mkdir -p "$out"
+          git archive HEAD tools mods/horizon/src/test/java crates/horizon-prepare research-lock.json LICENSE |
+            tar -xf - -C "$out"
+          cp packaging/PLAY.txt "$out/"
+          cp target/fast/horizon-official "$out/horizon-client"
+          for tool in horizon-ctl horizon-prepare horizon-server; do
+            cp "target/fast/$tool" "$out/"
+          done
+          for binary in horizon-client horizon-ctl horizon-prepare horizon-server; do
+            test "$(lipo -archs "$out/$binary")" = arm64
+            "$out/$binary" --help > /dev/null
+          done
+          ditto -c -k --norsrc --noextattr --noqtn --keepParent "$out" dist/horizon-macos-arm64.zip
+          unzip -tq dist/horizon-macos-arm64.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: horizon-macos-arm64
+          path: dist/horizon-macos-arm64.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
